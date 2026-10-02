@@ -15,11 +15,18 @@ module.exports = async (req, res) => {
   if (!U || !T) return res.status(500).json({ error: "Database not configured (add Upstash Redis to the project)" });
   try {
     if (req.method === "GET") {
-      const [a, l] = await Promise.all([cmd(["HGETALL", "pm:assets"]), cmd(["HGETALL", "pm:logs"])]);
-      return res.status(200).json({ assets: Object.values(obj(a)), logs: obj(l) });
+      const [a, l, p] = await Promise.all([cmd(["HGETALL", "pm:assets"]), cmd(["HGETALL", "pm:logs"]), cmd(["HGETALL", "pm:projects"])]);
+      return res.status(200).json({ projects: Object.keys(obj(p)).sort(), assets: Object.values(obj(a)), logs: obj(l) });
     }
     const b = req.body || {};
-    if (b.action === "addAsset") {
+    if (b.action === "addProject") {
+      const ok = await cmd(["HSETNX", "pm:projects", b.name, JSON.stringify({ name: b.name })]);
+      if (!ok) return res.status(409).json({ error: "Project already exists" });
+    } else if (b.action === "delProject") {
+      const used = Object.values(obj(await cmd(["HGETALL", "pm:assets"]))).some((x) => x.project === b.name);
+      if (used) return res.status(409).json({ error: "Delete this project's assets first" });
+      await cmd(["HDEL", "pm:projects", b.name]);
+    } else if (b.action === "addAsset") {
       const ok = await cmd(["HSETNX", "pm:assets", b.asset.code, JSON.stringify(b.asset)]);
       if (!ok) return res.status(409).json({ error: "Asset code already exists" });
     } else if (b.action === "delAsset") {
