@@ -40,12 +40,12 @@ td.n,th.n{text-align:right}tfoot td{font-weight:700}
 <script>
 const KEY="pm_asset_v1";
 const today=()=>new Date().toISOString().slice(0,10);
-let S={assets:[],logs:{}};
+let S={projects:[],assets:[],logs:{}};
 let PW=sessionStorage.getItem("pw")||"";
 async function api(body){const r=await fetch("/api/state",{method:body?"POST":"GET",headers:{"Content-Type":"application/json","x-app-password":PW},body:body?JSON.stringify(body):undefined});
 if(r.status===401){const p=prompt("Enter app password");if(p===null)throw new Error("Password required");PW=p;sessionStorage.setItem("pw",p);return api(body)}
 const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"Server error "+r.status);return j}
-async function load(){const j=await api();S.assets=j.assets;S.logs=j.logs}
+async function load(){const j=await api();S.projects=j.projects||[];S.assets=j.assets;S.logs=j.logs}
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const tabs=[["pm","P&M"],["se","Site Engineer"],["op","Operator"],["rep","Reports"]];
@@ -53,7 +53,7 @@ let tab="pm",repView="daily";
 const tmin=t=>{if(!t)return null;const[a,b]=t.split(":");return +a*60+ +b};
 const hh=h=>{const m=Math.round((h||0)*60);return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0")};
 const f=(n,d=1)=>n==null||isNaN(n)?"–":(+n).toFixed(d);
-const aopts=(sel)=>S.assets.map(a=>`<option value="${esc(a.code)}" ${a.code===sel?"selected":""}>${esc(a.reg)} / ${esc(a.code)}</option>`).join("");
+const aopts=(sel)=>S.assets.map(a=>`<option value="${esc(a.code)}" ${a.code===sel?"selected":""}>${esc(a.reg)} / ${esc(a.code)}${a.project?" ("+esc(a.project)+")":""}</option>`).join("");
 const aname=c=>{const a=S.assets.find(x=>x.code===c);return a?`${a.reg} / ${a.code}`:c};
 const msg=(id,t,ok=true)=>{$(id).className="msg "+(ok?"ok":"er");$(id).textContent=t};
 
@@ -63,14 +63,25 @@ function render(){({pm:rPM,se:rSE,op:rOP,rep:rRep})[tab]()}
 
 /* ---------- P&M: asset add / delete ---------- */
 function rPM(){
-$("#main").innerHTML=`<div class="card"><h2>1. Asset Addition / Deletion</h2>
-<div class="grid"><div><label>Reg. No</label><input id="a1"></div><div><label>Asset code</label><input id="a2"></div><div><label>Description</label><input id="a3"></div></div>
+const po=S.projects.map(p=>`<option>${esc(p)}</option>`).join("");
+$("#main").innerHTML=`<div class="card"><h2>Projects</h2>
+<div class="row"><div style="flex:1;min-width:200px"><label>Project name</label><input id="pn"></div><button class="btn" style="margin-top:0" onclick="addP()">Create project</button></div><div class="msg" id="pm"></div>
+<div class="tw"><table><thead><tr><th>Project</th><th class="n">Assets</th><th></th></tr></thead><tbody>
+${S.projects.map((p,i)=>`<tr><td>${esc(p)}</td><td class="n">${S.assets.filter(a=>a.project===p).length}</td><td><button class="x" onclick="delP(${i})">Delete</button></td></tr>`).join("")||`<tr><td colspan=3 class="mu">No projects yet. Create one first.</td></tr>`}</tbody></table></div></div>
+<div class="card"><h2>1. Asset Addition / Deletion</h2>
+<div class="grid"><div><label>Project</label><select id="a0">${po}</select></div><div><label>Reg. No</label><input id="a1"></div><div><label>Asset code</label><input id="a2"></div><div><label>Description</label><input id="a3"></div></div>
 <button class="btn" onclick="addA()">Add asset</button><div class="msg" id="m"></div></div>
-<div class="card"><h2>Registered assets (${S.assets.length})</h2><div class="tw"><table><thead><tr><th>Reg. No</th><th>Asset code</th><th>Description</th><th></th></tr></thead><tbody>
-${S.assets.map((a,i)=>`<tr><td>${esc(a.reg)}</td><td>${esc(a.code)}</td><td>${esc(a.desc)}</td><td><button class="x" onclick="delA(${i})">Delete</button></td></tr>`).join("")||`<tr><td colspan=4 class="mu">No assets yet.</td></tr>`}</tbody></table></div></div>`}
-async function addA(){const reg=$("#a1").value.trim(),code=$("#a2").value.trim(),desc=$("#a3").value.trim();
-if(!reg||!code||!desc)return msg("#m","Fill all three fields.",false);
-try{await api({action:"addAsset",asset:{reg,code,desc}});S.assets.push({reg,code,desc});rPM();msg("#m","Asset added.")}catch(e){msg("#m",e.message,false)}}
+<div class="card"><h2>Registered assets (${S.assets.length})</h2><div class="tw"><table><thead><tr><th>Project</th><th>Reg. No</th><th>Asset code</th><th>Description</th><th></th></tr></thead><tbody>
+${S.assets.map((a,i)=>`<tr><td>${esc(a.project||"–")}</td><td>${esc(a.reg)}</td><td>${esc(a.code)}</td><td>${esc(a.desc)}</td><td><button class="x" onclick="delA(${i})">Delete</button></td></tr>`).join("")||`<tr><td colspan=5 class="mu">No assets yet.</td></tr>`}</tbody></table></div></div>`}
+async function addP(){const n=$("#pn").value.trim();if(!n)return msg("#pm","Enter a project name.",false);
+if(S.projects.some(p=>p.toLowerCase()===n.toLowerCase()))return msg("#pm","Project already exists.",false);
+try{await api({action:"addProject",name:n});S.projects.push(n);S.projects.sort();rPM();msg("#pm","Project created.")}catch(e){msg("#pm",e.message,false)}}
+async function delP(i){const p=S.projects[i];if(S.assets.some(a=>a.project===p))return alert("Delete this project's assets first.");
+if(!confirm(`Delete project ${p}?`))return;try{await api({action:"delProject",name:p});S.projects.splice(i,1);rPM()}catch(e){alert(e.message)}}
+async function addA(){const project=$("#a0").value,reg=$("#a1").value.trim(),code=$("#a2").value.trim(),desc=$("#a3").value.trim();
+if(!project)return msg("#m","Create a project first.",false);
+if(!reg||!code||!desc)return msg("#m","Fill all fields.",false);
+try{await api({action:"addAsset",asset:{project,reg,code,desc}});S.assets.push({project,reg,code,desc});rPM();msg("#m","Asset added.")}catch(e){msg("#m",e.message,false)}}
 async function delA(i){const a=S.assets[i];if(!confirm(`Delete ${a.code}? Its daily records will also be removed.`))return;
 try{await api({action:"delAsset",code:a.code});Object.keys(S.logs).forEach(k=>{if(k.startsWith(a.code+"|"))delete S.logs[k]});S.assets.splice(i,1);rPM()}catch(e){alert(e.message)}}
 
@@ -118,21 +129,22 @@ $("#main").innerHTML=`<div class="card"><h2>Report</h2><div class="row noprint">
 <button class="btn sec" id="b2" onclick="repView='period';rRep()">Periodwise Report – Equipment wise</button></div>
 <div class="grid" style="margin-top:14px">${repView==="daily"?`<div><label>Date</label><input type="date" id="d1" value="${d}" onchange="runRep()"></div>`:
 `<div><label>From</label><input type="date" id="d1" value="${m}" onchange="runRep()"></div><div><label>To</label><input type="date" id="d2" value="${d}" onchange="runRep()"></div>`}
-<div><label>Equipment</label><select id="eqf" onchange="runRep()"><option value="">All equipment</option>${aopts("")}</select></div></div>
+<div><label>Project</label><select id="pjf" onchange="fillEq()"><option value="">All projects</option>${S.projects.map(p=>`<option>${esc(p)}</option>`).join("")}</select></div><div><label>Equipment</label><select id="eqf" onchange="runRep()"></select></div></div>
 <button class="btn noprint" onclick="window.print()">Print report</button></div>
 <div class="card"><div class="tw" id="out"></div></div>`;
-$(repView==="daily"?"#b1":"#b2").style.background="var(--ac)";$(repView==="daily"?"#b1":"#b2").style.color="#fff";runRep()}
-function runRep(){const d1=$("#d1").value,d2=repView==="daily"?d1:$("#d2").value,eq=$("#eqf").value;
-const rows=S.assets.filter(a=>!eq||a.code===eq).map(a=>{
+$(repView==="daily"?"#b1":"#b2").style.background="var(--ac)";$(repView==="daily"?"#b1":"#b2").style.color="#fff";fillEq()}
+function fillEq(){const pj=$("#pjf").value;$("#eqf").innerHTML='<option value="">All equipment</option>'+S.assets.filter(a=>!pj||a.project===pj).map(a=>`<option value="${esc(a.code)}">${esc(a.reg)} / ${esc(a.code)}</option>`).join("");runRep()}
+function runRep(){const d1=$("#d1").value,d2=repView==="daily"?d1:$("#d2").value,eq=$("#eqf").value,pj=$("#pjf").value;
+const rows=S.assets.filter(a=>(!pj||a.project===pj)&&(!eq||a.code===eq)).map(a=>{
 let t={days:0,wh:0,bd:0,hm:0,pr:0,opr:0,dz:0,un:"",any:false};
 Object.keys(S.logs).forEach(k=>{const[c,d]=k.split("|");if(c!==a.code||d<d1||d>d2)return;const x=calc(S.logs[k]);t.days++;t.any=true;
 t.wh+=x.wh||0;t.bd+=x.bd||0;t.hm+=x.hm||0;t.pr+=x.pr||0;t.opr+=x.opr||0;t.dz+=x.dz||0;t.un=x.un||t.un});
 return{a,t}}).filter(r=>r.t.any);
 const T=rows.reduce((s,r)=>({wh:s.wh+r.t.wh,bd:s.bd+r.t.bd,hm:s.hm+r.t.hm,dz:s.dz+r.t.dz}),{wh:0,bd:0,hm:0,dz:0});
 const title=repView==="daily"?`Daily report – ${d1}`:`Period report – ${d1} to ${d2}`;
-$("#out").innerHTML=`<h2>${title}</h2><table><thead><tr><th>Reg. No / Asset code</th><th>Description</th>${repView==="period"?"<th class='n'>Days</th>":""}<th class="n">Work (hh:mm)</th><th class="n">Breakdown (hh:mm)</th><th class="n">HMR run</th><th class="n">Production (SE)</th><th class="n">Production (Op)</th><th class="n">Diesel L</th><th class="n">L / HMR</th></tr></thead><tbody>
-${rows.map(({a,t})=>`<tr><td>${esc(a.reg)} / ${esc(a.code)}</td><td>${esc(a.desc)}</td>${repView==="period"?`<td class="n">${t.days}</td>`:""}<td class="n">${hh(t.wh)}</td><td class="n">${hh(t.bd)}</td><td class="n">${f(t.hm)}</td><td class="n">${f(t.pr)} ${esc(t.un)}</td><td class="n">${f(t.opr)}</td><td class="n">${f(t.dz)}</td><td class="n">${t.hm>0?f(t.dz/t.hm,2):"–"}</td></tr>`).join("")||`<tr><td colspan=10 class="mu">No records for this selection.</td></tr>`}</tbody>
-${rows.length?`<tfoot><tr><td colspan="${repView==="period"?3:2}">Total</td><td class="n">${hh(T.wh)}</td><td class="n">${hh(T.bd)}</td><td class="n">${f(T.hm)}</td><td></td><td></td><td class="n">${f(T.dz)}</td><td></td></tr></tfoot>`:""}</table>`}
+$("#out").innerHTML=`<h2>Project: ${esc(pj||"All projects")}</h2><p class="mu">${title}</p><table><thead><tr><th>Project</th><th>Reg. No / Asset code</th><th>Description</th>${repView==="period"?"<th class='n'>Days</th>":""}<th class="n">Work (hh:mm)</th><th class="n">Breakdown (hh:mm)</th><th class="n">HMR run</th><th class="n">Production (SE)</th><th class="n">Production (Op)</th><th class="n">Diesel L</th><th class="n">L / HMR</th></tr></thead><tbody>
+${rows.map(({a,t})=>`<tr><td>${esc(a.project||"–")}</td><td>${esc(a.reg)} / ${esc(a.code)}</td><td>${esc(a.desc)}</td>${repView==="period"?`<td class="n">${t.days}</td>`:""}<td class="n">${hh(t.wh)}</td><td class="n">${hh(t.bd)}</td><td class="n">${f(t.hm)}</td><td class="n">${f(t.pr)} ${esc(t.un)}</td><td class="n">${f(t.opr)}</td><td class="n">${f(t.dz)}</td><td class="n">${t.hm>0?f(t.dz/t.hm,2):"–"}</td></tr>`).join("")||`<tr><td colspan=11 class="mu">No records for this selection.</td></tr>`}</tbody>
+${rows.length?`<tfoot><tr><td colspan="${repView==="period"?4:3}">Total</td><td class="n">${hh(T.wh)}</td><td class="n">${hh(T.bd)}</td><td class="n">${f(T.hm)}</td><td></td><td></td><td class="n">${f(T.dz)}</td><td></td></tr></tfoot>`:""}</table>`}
 
 nav();$("#main").innerHTML='<div class="card">Loading…</div>';
 load().then(render).catch(e=>{$("#main").innerHTML='<div class="card"><h2>Cannot reach the server</h2><p class="er">'+esc(e.message)+'</p><p class="mu">See README: connect an Upstash Redis database to the Vercel project.</p></div>'});
