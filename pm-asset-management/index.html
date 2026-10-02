@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>P&M Asset Management</title>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--tx:#1b2430;--mu:#66717f;--bd:#d9dee5;--ac:#c2570c;--ac2:#fff3e8;--ok:#1d7a46;--er:#b3261e;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14181d;--card:#1d232b;--tx:#e8ecf1;--mu:#98a3b1;--bd:#2f3844;--ac:#f08a3c;--ac2:#2b2118;--ok:#4cc27d;--er:#ff7a70}}
+:root[data-theme="dark"]{--bg:#14181d;--card:#1d232b;--tx:#e8ecf1;--mu:#98a3b1;--bd:#2f3844;--ac:#f08a3c;--ac2:#2b2118;--ok:#4cc27d;--er:#ff7a70}
+*{box-sizing:border-box}html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{background:var(--ac);color:#fff;padding:14px 16px;text-align:center;font-weight:700;letter-spacing:.08em;font-size:18px}
+nav{display:flex;gap:6px;padding:10px;max-width:960px;margin:0 auto;overflow-x:auto}
+nav button{flex:1;min-width:110px;padding:10px;border:1px solid var(--bd);background:var(--card);color:var(--tx);border-radius:8px;font-weight:600;cursor:pointer}
+nav button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+main{max-width:960px;margin:0 auto;padding:0 10px 30px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:14px}
+h2{margin:0 0 12px;font-size:17px}h3{margin:18px 0 8px;font-size:15px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+label{display:block;font-size:12px;color:var(--mu);font-weight:600;margin-bottom:3px}
+input,select{width:100%;padding:9px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit}
+.btn{padding:9px 16px;border:0;border-radius:6px;background:var(--ac);color:#fff;font-weight:600;cursor:pointer;margin-top:12px}
+.btn.sec{background:var(--ac2);color:var(--ac);border:1px solid var(--ac)}
+.x{background:none;border:0;color:var(--er);cursor:pointer;font-weight:700}
+.tw{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:560px}
+th,td{padding:8px 10px;border-bottom:1px solid var(--bd);text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--mu);text-transform:uppercase;background:var(--ac2)}
+td.n,th.n{text-align:right}tfoot td{font-weight:700}
+.msg{font-size:13px;margin-top:8px;min-height:18px}.ok{color:var(--ok)}.er{color:var(--er)}
+.mu{color:var(--mu);font-size:13px}.row{display:flex;gap:8px;flex-wrap:wrap;align-items:end}
+@media print{header,nav,.noprint{display:none}.card{border:0}}
+</style>
+</head>
+<body>
+<header>P&amp;M ASSET MANAGEMENT</header>
+<nav id="nav"></nav>
+<main id="main"></main>
+<script>
+const KEY="pm_asset_v1";
+const today=()=>new Date().toISOString().slice(0,10);
+let S={assets:[],logs:{}};
+let PW=sessionStorage.getItem("pw")||"";
+async function api(body){const r=await fetch("/api/state",{method:body?"POST":"GET",headers:{"Content-Type":"application/json","x-app-password":PW},body:body?JSON.stringify(body):undefined});
+if(r.status===401){const p=prompt("Enter app password");if(p===null)throw new Error("Password required");PW=p;sessionStorage.setItem("pw",p);return api(body)}
+const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"Server error "+r.status);return j}
+async function load(){const j=await api();S.assets=j.assets;S.logs=j.logs}
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const tabs=[["pm","P&M"],["se","Site Engineer"],["op","Operator"],["rep","Reports"]];
+let tab="pm",repView="daily";
+const tmin=t=>{if(!t)return null;const[a,b]=t.split(":");return +a*60+ +b};
+const hh=h=>{const m=Math.round((h||0)*60);return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0")};
+const f=(n,d=1)=>n==null||isNaN(n)?"–":(+n).toFixed(d);
+const aopts=(sel)=>S.assets.map(a=>`<option value="${esc(a.code)}" ${a.code===sel?"selected":""}>${esc(a.reg)} / ${esc(a.code)}</option>`).join("");
+const aname=c=>{const a=S.assets.find(x=>x.code===c);return a?`${a.reg} / ${a.code}`:c};
+const msg=(id,t,ok=true)=>{$(id).className="msg "+(ok?"ok":"er");$(id).textContent=t};
+
+function nav(){$("#nav").innerHTML=tabs.map(([k,l])=>`<button class="${k===tab?"on":""}" onclick="go('${k}')">${l}</button>`).join("")}
+async function go(t){tab=t;nav();try{await load()}catch(e){}render()}
+function render(){({pm:rPM,se:rSE,op:rOP,rep:rRep})[tab]()}
+
+/* ---------- P&M: asset add / delete ---------- */
+function rPM(){
+$("#main").innerHTML=`<div class="card"><h2>1. Asset Addition / Deletion</h2>
+<div class="grid"><div><label>Reg. No</label><input id="a1"></div><div><label>Asset code</label><input id="a2"></div><div><label>Description</label><input id="a3"></div></div>
+<button class="btn" onclick="addA()">Add asset</button><div class="msg" id="m"></div></div>
+<div class="card"><h2>Registered assets (${S.assets.length})</h2><div class="tw"><table><thead><tr><th>Reg. No</th><th>Asset code</th><th>Description</th><th></th></tr></thead><tbody>
+${S.assets.map((a,i)=>`<tr><td>${esc(a.reg)}</td><td>${esc(a.code)}</td><td>${esc(a.desc)}</td><td><button class="x" onclick="delA(${i})">Delete</button></td></tr>`).join("")||`<tr><td colspan=4 class="mu">No assets yet.</td></tr>`}</tbody></table></div></div>`}
+async function addA(){const reg=$("#a1").value.trim(),code=$("#a2").value.trim(),desc=$("#a3").value.trim();
+if(!reg||!code||!desc)return msg("#m","Fill all three fields.",false);
+try{await api({action:"addAsset",asset:{reg,code,desc}});S.assets.push({reg,code,desc});rPM();msg("#m","Asset added.")}catch(e){msg("#m",e.message,false)}}
+async function delA(i){const a=S.assets[i];if(!confirm(`Delete ${a.code}? Its daily records will also be removed.`))return;
+try{await api({action:"delAsset",code:a.code});Object.keys(S.logs).forEach(k=>{if(k.startsWith(a.code+"|"))delete S.logs[k]});S.assets.splice(i,1);rPM()}catch(e){alert(e.message)}}
+
+/* ---------- Site Engineer & Operator forms ---------- */
+const L=(a,d)=>S.logs[a+"|"+d]||{};
+function formShell(title,fields,role){
+const a0=S.assets[0]?.code||"";
+$("#main").innerHTML=`<div class="card"><h2>${title}</h2>
+<div class="grid"><div><label>Equipment – Reg.no / Asset code</label><select id="eq" onchange="fill('${role}')">${aopts(a0)}</select></div>
+<div><label>Date</label><input type="date" id="dt" value="${today()}" onchange="fill('${role}')"></div></div>
+<h3>${role==="se"?"Site engineer entry":"Operator entry"}</h3><div class="grid">${fields}</div>
+<button class="btn" onclick="saveLog('${role}')">Save entry</button><div class="msg" id="m"></div></div>
+<div class="card"><h2>Recent entries</h2><div class="tw" id="recent"></div></div>`;
+if(!S.assets.length)msg("#m","Add an asset in the P&M tab first.",false);fill(role)}
+const inp=(id,l,t="number",ex="")=>`<div><label>${l}</label><input id="${id}" type="${t}" ${ex}></div>`;
+function rSE(){formShell("Site Engineer – Daily Work Entry",
+inp("st","Work start time","time")+inp("sp","Work stop time","time")+inp("pr","Production","number",'min="0" step="any"')+
+`<div><label>Unit</label><select id="un"><option>cum</option><option>Trip</option><option>No</option><option>MT</option></select></div>`+
+inp("bd","Breakdown time (hh:mm)","time",'value="00:00"')+inp("lb","Lunch break time (hh:mm)","time",'value="00:00"'),"se")}
+function rOP(){formShell("Operator – Daily Machine Entry",
+inp("hs","HMR start","number",'min="0" step="any"')+inp("he","HMR stop","number",'min="0" step="any"')+
+inp("op","Production","number",'min="0" step="any"')+inp("dz","Diesel (litres)","number",'min="0" step="any"'),"op")}
+const map={se:{st:"st",sp:"sp",pr:"pr",un:"un",bd:"bd",lb:"lb"},op:{hs:"hs",he:"he",op:"op",dz:"dz"}};
+function fill(role){const r=L($("#eq").value,$("#dt").value);
+Object.keys(map[role]).forEach(k=>{const e=$("#"+k);e.value=r[k]??(k==="bd"||k==="lb"?"00:00":k==="un"?"cum":"")});recent(role)}
+async function saveLog(role){const a=$("#eq").value,d=$("#dt").value;if(!a||!d)return msg("#m","Select equipment and date.",false);
+const v={};Object.keys(map[role]).forEach(k=>v[k]=$("#"+k).value);
+if(role==="se"){if(!v.st||!v.sp)return msg("#m","Enter start and stop time.",false);const dur=tmin(v.sp)-tmin(v.st);if(dur<=0)return msg("#m","Stop time must be after start time.",false);
+if((tmin(v.bd)||0)+(tmin(v.lb)||0)>dur)return msg("#m","Breakdown + lunch exceed the working period.",false)}
+else{if(v.hs===""||v.he==="")return msg("#m","Enter HMR start and stop.",false);if(+v.he<+v.hs)return msg("#m","HMR stop cannot be less than start.",false)}
+try{await api({action:"saveLog",key:a+"|"+d,data:v});S.logs[a+"|"+d]={...L(a,d),...v};msg("#m","Saved for "+aname(a)+" on "+d+".");recent(role)}catch(e){msg("#m",e.message,false)}}
+function recent(role){const ks=Object.keys(S.logs).sort((x,y)=>y.split("|")[1].localeCompare(x.split("|")[1])).filter(k=>S.logs[k][role==="se"?"st":"hs"]!=null).slice(0,8);
+const h=role==="se"?["Date","Equipment","Start","Stop","Prod.","Unit","BD","Lunch"]:["Date","Equipment","HMR start","HMR stop","Prod.","Diesel"];
+$("#recent").innerHTML=`<table><thead><tr>${h.map(x=>`<th>${x}</th>`).join("")}</tr></thead><tbody>${ks.map(k=>{const[a,d]=k.split("|"),r=S.logs[k];
+const c=role==="se"?[r.st,r.sp,r.pr,r.un,r.bd,r.lb]:[r.hs,r.he,r.op,r.dz];
+return`<tr><td>${d}</td><td>${esc(a)}</td>${c.map(x=>`<td>${esc(x??"")}</td>`).join("")}</tr>`}).join("")||`<tr><td colspan=8 class="mu">No entries yet.</td></tr>`}</tbody></table>`}
+
+/* ---------- Reports ---------- */
+function calc(r){const wh=r.st&&r.sp?Math.max(0,(tmin(r.sp)-tmin(r.st)-(tmin(r.lb)||0)-(tmin(r.bd)||0))/60):null;
+const hm=r.hs!==undefined&&r.he!==undefined&&r.hs!==""&&r.he!==""?+r.he-+r.hs:null;
+return{wh,bd:(tmin(r.bd)||0)/60,hm,pr:r.pr!==undefined&&r.pr!==""?+r.pr:null,opr:r.op!==undefined&&r.op!==""?+r.op:null,dz:r.dz!==undefined&&r.dz!==""?+r.dz:null,un:r.un||""}}
+function rRep(){const d=today(),m=d.slice(0,8)+"01";
+$("#main").innerHTML=`<div class="card"><h2>Report</h2><div class="row noprint">
+<button class="btn sec" id="b1" onclick="repView='daily';rRep()">Daily Report – Equipment wise</button>
+<button class="btn sec" id="b2" onclick="repView='period';rRep()">Periodwise Report – Equipment wise</button></div>
+<div class="grid" style="margin-top:14px">${repView==="daily"?`<div><label>Date</label><input type="date" id="d1" value="${d}" onchange="runRep()"></div>`:
+`<div><label>From</label><input type="date" id="d1" value="${m}" onchange="runRep()"></div><div><label>To</label><input type="date" id="d2" value="${d}" onchange="runRep()"></div>`}
+<div><label>Equipment</label><select id="eqf" onchange="runRep()"><option value="">All equipment</option>${aopts("")}</select></div></div>
+<button class="btn noprint" onclick="window.print()">Print report</button></div>
+<div class="card"><div class="tw" id="out"></div></div>`;
+$(repView==="daily"?"#b1":"#b2").style.background="var(--ac)";$(repView==="daily"?"#b1":"#b2").style.color="#fff";runRep()}
+function runRep(){const d1=$("#d1").value,d2=repView==="daily"?d1:$("#d2").value,eq=$("#eqf").value;
+const rows=S.assets.filter(a=>!eq||a.code===eq).map(a=>{
+let t={days:0,wh:0,bd:0,hm:0,pr:0,opr:0,dz:0,un:"",any:false};
+Object.keys(S.logs).forEach(k=>{const[c,d]=k.split("|");if(c!==a.code||d<d1||d>d2)return;const x=calc(S.logs[k]);t.days++;t.any=true;
+t.wh+=x.wh||0;t.bd+=x.bd||0;t.hm+=x.hm||0;t.pr+=x.pr||0;t.opr+=x.opr||0;t.dz+=x.dz||0;t.un=x.un||t.un});
+return{a,t}}).filter(r=>r.t.any);
+const T=rows.reduce((s,r)=>({wh:s.wh+r.t.wh,bd:s.bd+r.t.bd,hm:s.hm+r.t.hm,dz:s.dz+r.t.dz}),{wh:0,bd:0,hm:0,dz:0});
+const title=repView==="daily"?`Daily report – ${d1}`:`Period report – ${d1} to ${d2}`;
+$("#out").innerHTML=`<h2>${title}</h2><table><thead><tr><th>Reg. No / Asset code</th><th>Description</th>${repView==="period"?"<th class='n'>Days</th>":""}<th class="n">Work (hh:mm)</th><th class="n">Breakdown (hh:mm)</th><th class="n">HMR run</th><th class="n">Production (SE)</th><th class="n">Production (Op)</th><th class="n">Diesel L</th><th class="n">L / HMR</th></tr></thead><tbody>
+${rows.map(({a,t})=>`<tr><td>${esc(a.reg)} / ${esc(a.code)}</td><td>${esc(a.desc)}</td>${repView==="period"?`<td class="n">${t.days}</td>`:""}<td class="n">${hh(t.wh)}</td><td class="n">${hh(t.bd)}</td><td class="n">${f(t.hm)}</td><td class="n">${f(t.pr)} ${esc(t.un)}</td><td class="n">${f(t.opr)}</td><td class="n">${f(t.dz)}</td><td class="n">${t.hm>0?f(t.dz/t.hm,2):"–"}</td></tr>`).join("")||`<tr><td colspan=10 class="mu">No records for this selection.</td></tr>`}</tbody>
+${rows.length?`<tfoot><tr><td colspan="${repView==="period"?3:2}">Total</td><td class="n">${hh(T.wh)}</td><td class="n">${hh(T.bd)}</td><td class="n">${f(T.hm)}</td><td></td><td></td><td class="n">${f(T.dz)}</td><td></td></tr></tfoot>`:""}</table>`}
+
+nav();$("#main").innerHTML='<div class="card">Loading…</div>';
+load().then(render).catch(e=>{$("#main").innerHTML='<div class="card"><h2>Cannot reach the server</h2><p class="er">'+esc(e.message)+'</p><p class="mu">See README: connect an Upstash Redis database to the Vercel project.</p></div>'});
+</script>
+</body>
+</html>
